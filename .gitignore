@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Local secrets and profile
+config/config.json
+config/*.ovpn
+config/*.conf
+
+# State is under LOCALAPPDATA at runtime; ignore if copied here
+.state/
+img/Luis-MFA.png

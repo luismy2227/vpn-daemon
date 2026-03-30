@@ -1,0 +1,128 @@
+---
+alwaysApply: false
+---
+We'll build a python vpn daemon that keeps me inside my vpn during work hours, even if wifi change, untill the vpn says its offline, or until we manually say it shouldn't be connected.
+
+Context:
+- we have the totp key
+- currently we connect through pritunl (I think it uses open vpn under the hood, and I know for sure other teammembers use directly that)
+- on `C:\Users\Luis2\AppData\Roaming\pritunl\profiles` we have .conf and .ovpn files for my profile. We can move them to a more centralized and easy to change place.
+- we'll add it to windows task, at logon (if on work hours (settings defined))
+- Daily Login Window
+- Only reconnect during work hours.
+- Network Change Detection
+- Reconnect if WiFi changes.
+- Tray Icon
+
+Tiny GUI with:
+Connected 🟢
+Reconnect
+Disconnect
+Pause daemon
+
+- use uv
+- set a docs/ folder and document everything
+- set a scripts/ folder and write ps1 files for installing/setting the project up, and for runing and exporting
+
+Example (by ChatGpt)
+
+## Step 1 — Install Dependencies
+```bash
+pip install pyotp psutil
+```
+
+## Step 2 — Folder Structure
+```
+vpn-daemon/
+   vpn_daemon.py
+   config.json
+   profile.ovpn
+```
+
+## Step 3 — Config File
+```json
+{
+  "username": "vpn_user",
+  "password": "vpn_password",
+  "totp_secret": "JBSWY3DPEHPK3PXP", //fake
+  "openvpn_path": "C:\\Program Files\\OpenVPN\\bin\\openvpn.exe", // uncertain
+  "profile": "profile.ovpn",
+  "check_interval": 30
+}
+```
+
+## Step 4 — The VPN Daemon
+```py
+import json
+import time
+import subprocess
+import pyotp
+import psutil
+import os
+
+CONFIG_FILE = "config.json"
+
+
+def load_config():
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
+
+
+def generate_password(password, secret):
+    totp = pyotp.TOTP(secret)
+    return password + totp.now()
+
+
+def vpn_running():
+    for proc in psutil.process_iter(['name']):
+        if proc.info['name'] and "openvpn" in proc.info['name'].lower():
+            return True
+    return False
+
+
+def start_vpn(config):
+
+    otp_password = generate_password(
+        config["password"],
+        config["totp_secret"]
+    )
+
+    with open("auth.txt", "w") as f:
+        f.write(config["username"] + "\n")
+        f.write(otp_password + "\n")
+
+    subprocess.Popen([
+        config["openvpn_path"],
+        "--config",
+        config["profile"],
+        "--auth-user-pass",
+        "auth.txt"
+    ])
+
+    print("VPN started")
+
+
+def stop_vpn():
+    for proc in psutil.process_iter(['pid', 'name']):
+        if proc.info['name'] and "openvpn" in proc.info['name'].lower():
+            psutil.Process(proc.info['pid']).terminate()
+
+
+def daemon():
+
+    config = load_config()
+
+    print("VPN daemon started")
+
+    while True:
+
+        if not vpn_running():
+            print("VPN not running, reconnecting...")
+            start_vpn(config)
+
+        time.sleep(config["check_interval"])
+
+
+if __name__ == "__main__":
+    daemon()
+```
