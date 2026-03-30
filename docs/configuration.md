@@ -1,67 +1,31 @@
 # Configuration
 
-Configuration is JSON. See [`config/config.example.json`](../config/config.example.json) for a full template.
-
-## Credentials and paths
+## Credentials & paths
 
 | Field | Description |
 | --- | --- |
-| `username` | VPN username |
-| `password` | Static password (TOTP digits are appended automatically) |
+| `username` | OpenVPN username |
+| `password` | PIN or static password (TOTP digits are appended automatically) |
 | `totp_secret` | Base32 TOTP secret |
 | `openvpn_path` | Full path to `openvpn.exe` |
-| `profile` | Path to `.ovpn` / `.conf`, relative to the directory containing `config.json` unless absolute |
+| `profile` | `.ovpn` path (relative to the folder containing `config.json`, unless absolute) |
 
-## OpenVPN management
-
-| Field | Default | Description |
-| --- | --- | --- |
-| `management_host` | `127.0.0.1` | Management bind address (passed to OpenVPN) |
-| `management_port` | `7505` | TCP port; must be free |
-
-The daemon uses the management interface to distinguish connected vs still negotiating. If management is unreachable, status falls back to “process running” and optional ping (see below).
-
-## Schedule (IANA timezone)
-
-| Field | Description |
-| --- | --- |
-| `timezone` | IANA name, e.g. `America/New_York` (used by Python) |
-| `work_days` | Short names: `mon`, `tue`, … |
-| `work_hours_start` / `work_hours_end` | `HH:MM` in the configured timezone |
-| `reconnect_outside_hours` | If `true`, auto-reconnect even outside the window; default `false` |
-
-Outside work hours (when `reconnect_outside_hours` is `false`), the daemon does not auto-start or auto-reconnect. It does not force-disconnect an existing tunnel when the window ends.
-
-## Optional Windows timezone (PowerShell only)
-
-| Field | Description |
-| --- | --- |
-| `timezone_windows` | Windows timezone ID for `scripts/check-work-hours.ps1`, e.g. `Eastern Standard Time`. Not used by Python. Leave `null` if you do not use that script. List IDs with `tzutil /l` in a command prompt. |
-
-## Network polling
+## OpenVPN management (tray status)
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `network_poll_interval_seconds` | `5` | How often to sample network signature |
-| `network_reconnect_debounce_seconds` | `3` | Delay after a change before triggering reconnect |
-| `network_ignore_seconds_after_vpn_start` | `60` | Ignore “network changed” restarts for this long after each successful OpenVPN start (stops VPN‑adapter churn from looping) |
+| `use_management` | `true` | If `false`, OpenVPN is started **without** `--management`. The tray uses **process running** (and optional `internal_ping_host`) for green/yellow; hover text shows **last action** (connect / disconnect / …). |
+| `management_host` | `127.0.0.1` | Passed to `--management` when `use_management` is `true` |
+| `management_port` | `7505` | TCP port when `use_management` is `true` (must be free) |
+| `strip_profile_management` | `true` | Remove embedded `management …` lines from the profile so this app’s `--management` is used (fixes many Pritunl exports). |
+| `management_hold_release` | `true` | Send `hold release` on the management socket when needed. |
+| `internal_ping_host` | `null` | If set, when state is CONNECTED, ping this host before showing green (optional). |
 
-Wi‑Fi: the signature is `wlan:<your SSID>` so adding a VPN virtual adapter does not change it. Ethernet: profiles are filtered to drop common VPN/TAP/Wintun interface names; extend the filter in `src/vpn_daemon/network.py` if your adapter is still misclassified.
-
-## Health check
-
-| Field | Description |
-| --- | --- |
-| `internal_ping_host` | If set, when management reports `CONNECTED`, the daemon pings this host (`ping -n 1`); failure treats the link as not ready for “connected” UI. Optional. |
-
-## Logging
-
-| Field | Description |
-| --- | --- |
-| `log_directory` | If set, OpenVPN gets `--log-append <dir>/openvpn.log` |
-
-## Intervals
+## Other
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `check_interval_seconds` | `30` | How often the core loop re-evaluates auto-reconnect policy |
+| `log_directory` | `null` | If set, OpenVPN appends to `<dir>/openvpn.log`. |
+| `tray_tooltip` | (see example) | Tray hover text. |
+| `auto_connect` | `false` | Start OpenVPN once when the tray starts. |
+| `notify_on_action` | `false` | Balloon when Connect/Disconnect/Reconnect is chosen. |

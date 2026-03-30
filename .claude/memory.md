@@ -1,0 +1,3 @@
+- the goal is to simplify my access to vpn, by at least removing the need of manually add the otp code.
+- multi step operations should have its script at the scripts folder
+- test our code

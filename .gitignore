@@ -13,3 +13,5 @@ config/*.conf
 # State is under LOCALAPPDATA at runtime; ignore if copied here
 .state/
 img/Luis-MFA.png
+
+logs/

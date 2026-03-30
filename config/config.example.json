@@ -1,21 +1,14 @@
 {
-  "username": "vpn_user",
-  "password": "your_static_password",
-  "totp_secret": "BASE32SECRET",
   "openvpn_path": "C:\\Program Files\\OpenVPN\\bin\\openvpn.exe",
   "profile": "profile.ovpn",
-  "check_interval_seconds": 30,
+  "use_management": true,
   "management_host": "127.0.0.1",
   "management_port": 7505,
-  "timezone": "America/New_York",
-  "timezone_windows": null,
-  "work_days": ["mon", "tue", "wed", "thu", "fri"],
-  "work_hours_start": "09:00",
-  "work_hours_end": "17:30",
-  "reconnect_outside_hours": false,
-  "network_poll_interval_seconds": 5,
-  "network_reconnect_debounce_seconds": 3,
-  "network_ignore_seconds_after_vpn_start": 60,
+  "strip_profile_management": true,
+  "management_hold_release": true,
   "internal_ping_host": null,
-  "log_directory": null
+  "log_directory": null,
+  "tray_tooltip": "VPN — right-click for menu",
+  "auto_connect": false,
+  "notify_on_action": false
 }

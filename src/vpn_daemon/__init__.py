@@ -1,3 +1,3 @@
-"""VPN work-hours daemon for Windows."""
+"""Tray OpenVPN launcher with TOTP auth for Windows."""
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"

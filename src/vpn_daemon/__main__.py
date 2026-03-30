@@ -1,189 +1,151 @@
 from __future__ import annotations
 
+import ctypes
 import logging
 import queue
+import sys
 import threading
 import time
 
-from vpn_daemon.config import load_config, default_state_dir
-from vpn_daemon.network import NetworkChangePoller
+from vpn_daemon.config import CredentialsMissingError, default_config_path, load_config
 from vpn_daemon.openvpn import OpenVpnRunner, VpnLinkState
-from vpn_daemon.schedule import should_auto_reconnect, within_work_hours
-from vpn_daemon.state import StateStore
-from vpn_daemon.tray_app import TrayController, UiState
+from vpn_daemon.tray_app import TrayController, icon_for_state
 
 log = logging.getLogger(__name__)
 
-LINK_POLL_SECONDS = 2.0
-LOOP_SLEEP = 0.25
+
+def _ensure_admin() -> None:
+    if ctypes.windll.shell32.IsUserAnAdmin():
+        return
+    params = " ".join(f'"{a}"' for a in sys.argv)
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+    sys.exit(0)
 
 
 def main() -> None:
+    _ensure_admin()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    config = load_config()
-    store = StateStore(default_state_dir() / "state.json")
-    rt = store.load()
-    ui = UiState(paused=rt.daemon_paused, user_disconnected=rt.user_disconnected)
+
+    config_path = default_config_path()
+    try:
+        config = load_config(config_path)
+    except CredentialsMissingError:
+        log.info("Credentials missing — launching setup wizard.")
+        from vpn_daemon.setup_wizard import run_setup_wizard
+        if not run_setup_wizard(config_path):
+            log.info("Setup cancelled. Exiting.")
+            return
+        config = load_config(config_path)
 
     ctrl: queue.Queue[str] = queue.Queue()
-    stop_event = threading.Event()
-    tray = TrayController(ctrl, ui)
+    stop = threading.Event()
     runner_ref: list[OpenVpnRunner | None] = [None]
+    tray = TrayController(config, ctrl)
 
-    def persist() -> None:
-        store.save(ui.snapshot_persist())
+    def _tray_title(last_verb: str, running: bool) -> str:
+        tail = f"Last: {last_verb} · {'running' if running else 'stopped'}"
+        base = config.tray_tooltip.strip()
+        merged = f"{base} — {tail}" if base else tail
+        return merged[:120]
 
-    def daemon_loop() -> None:
+    def worker_loop(icon) -> None:
         runner = OpenVpnRunner(config)
         runner_ref[0] = runner
+        last_verb = "idle"
+        prev_st = VpnLinkState.DISCONNECTED
 
-        last_net_poll = 0.0
-        last_link_poll = 0.0
-        last_vpn_policy_check = 0.0
-        backoff_seconds = 0.0
-        next_retry_at = 0.0
-        last_openvpn_start_at = 0.0
-
-        def mark_openvpn_started() -> None:
-            nonlocal last_openvpn_start_at
-            last_openvpn_start_at = time.monotonic()
-
-        def on_network_change() -> None:
-            ctrl.put("network_flap")
-
-        poller = NetworkChangePoller(
-            config.network_poll_interval_seconds,
-            config.network_reconnect_debounce_seconds,
-            on_network_change,
-        )
-
-        def handle_msg(msg: str) -> None:
-            nonlocal backoff_seconds, next_retry_at
-            if msg == "quit":
-                log.info("Quit requested")
-                runner.stop()
-                stop_event.set()
-                tray.stop()
-                return
-            if msg == "toggle_pause":
-                ui.toggle_pause()
-                log.info("Daemon paused=%s", ui.is_paused())
-                persist()
-                return
-            if msg == "disconnect":
-                ui.set_user_disconnected(True)
-                runner.stop()
-                backoff_seconds = 0.0
-                next_retry_at = 0.0
-                persist()
-                log.info("User disconnect; OpenVPN stopped")
-                return
-            if msg == "reconnect":
-                ui.set_user_disconnected(False)
-                runner.stop()
-                backoff_seconds = 0.0
-                next_retry_at = 0.0
-                persist()
-                time.sleep(1)
-                try:
-                    runner.start()
-                    mark_openvpn_started()
-                except OSError as e:
-                    log.error("Reconnect start failed: %s", e)
-                    backoff_seconds = min(120.0, max(5.0, backoff_seconds * 2 or 5.0))
-                    next_retry_at = time.monotonic() + backoff_seconds
-                return
-            if msg == "network_flap":
-                if not should_auto_reconnect(config):
-                    return
-                if ui.is_paused() or ui.user_wants_disconnected():
-                    return
-                quiet = time.monotonic() - last_openvpn_start_at
-                if quiet < config.network_ignore_seconds_after_vpn_start:
-                    log.debug(
-                        "Ignoring network flap (%.0fs after last OpenVPN start)",
-                        quiet,
-                    )
-                    return
-                log.info("Network change: restarting OpenVPN")
-                runner.stop()
-                time.sleep(1)
-                try:
-                    runner.start()
-                    mark_openvpn_started()
-                except OSError as e:
-                    log.error("Network-flap restart failed: %s", e)
-                    backoff_seconds = min(120.0, max(5.0, backoff_seconds * 2 or 5.0))
-                    next_retry_at = time.monotonic() + backoff_seconds
-                return
-
-        while not stop_event.is_set():
-            now = time.monotonic()
-
+        if config.auto_connect:
             try:
-                while True:
-                    handle_msg(ctrl.get_nowait())
-                    if stop_event.is_set():
-                        break
+                runner.start()
+                last_verb = "auto-connect"
+            except Exception as e:
+                log.error("auto_connect failed: %s", e)
+                last_verb = "auto-connect failed"
+
+        while not stop.is_set():
+            try:
+                msg = ctrl.get(timeout=0.5)
             except queue.Empty:
-                pass
+                msg = None
 
-            if stop_event.is_set():
-                break
-
-            in_hours = within_work_hours(config)
-            ui.set_flags(within_hours=in_hours)
-
-            if now - last_net_poll >= config.network_poll_interval_seconds:
-                poller.tick()
-                last_net_poll = now
-
-            if now - last_link_poll >= LINK_POLL_SECONDS:
-                link = runner.effective_link_state()
-                ui.set_link(link)
-                last_link_poll = now
-                if link == VpnLinkState.CONNECTED:
-                    backoff_seconds = 0.0
-                    next_retry_at = 0.0
-
-            if now - last_vpn_policy_check >= config.check_interval_seconds:
-                last_vpn_policy_check = now
-                eff = runner.effective_link_state()
-                ui.set_link(eff)
-
-                auto_ok = (
-                    should_auto_reconnect(config)
-                    and not ui.is_paused()
-                    and not ui.user_wants_disconnected()
-                )
-                if auto_ok and eff == VpnLinkState.DISCONNECTED and now >= next_retry_at:
+            if msg == "toggle":
+                if runner.is_process_alive():
+                    runner.stop()
+                    last_verb = "disconnect"
+                else:
                     try:
                         runner.start()
-                        mark_openvpn_started()
-                        next_retry_at = 0.0
-                    except OSError as e:
-                        log.error("Auto-start failed: %s", e)
-                        backoff_seconds = min(120.0, max(5.0, backoff_seconds * 2 or 5.0))
-                        next_retry_at = now + backoff_seconds
+                        last_verb = "connect"
+                    except Exception as e:
+                        log.error("connect failed: %s", e)
+                        last_verb = "connect failed"
+            elif msg == "connect":
+                try:
+                    runner.start()
+                    last_verb = "connect"
+                except Exception as e:
+                    log.error("connect failed: %s", e)
+                    last_verb = "connect failed"
+            elif msg == "disconnect":
+                runner.stop()
+                last_verb = "disconnect"
+            elif msg == "reconnect":
+                runner.stop()
+                last_verb = "reconnect"
+                time.sleep(1.0)
+                try:
+                    runner.start()
+                except Exception as e:
+                    log.error("reconnect failed: %s", e)
+                    last_verb = "reconnect failed"
+            elif msg == "settings":
+                def _open_wizard() -> None:
+                    from vpn_daemon.setup_wizard import run_setup_wizard
+                    run_setup_wizard(config_path)
+                threading.Thread(target=_open_wizard, daemon=True).start()
+            elif msg == "quit":
+                runner.stop()
+                stop.set()
+                try:
+                    icon.stop()
+                except Exception as e:
+                    log.debug("icon.stop: %s", e)
+                break
 
-            time.sleep(LOOP_SLEEP)
+            if stop.is_set():
+                break
+
+            try:
+                st = (
+                    runner.effective_link_state()
+                    if runner.is_process_alive()
+                    else VpnLinkState.DISCONNECTED
+                )
+                if st != prev_st:
+                    tray.notify_state_change(prev_st, st)
+                    prev_st = st
+                icon.icon = icon_for_state(st)
+                try:
+                    icon.title = _tray_title(last_verb, runner.is_process_alive())
+                except Exception as e:
+                    log.debug("tray title: %s", e)
+            except Exception as e:
+                log.debug("tray icon update: %s", e)
 
         runner.stop()
-        log.info("Daemon loop exit")
+        runner_ref[0] = None
 
-    worker = threading.Thread(target=daemon_loop, daemon=True)
-    worker.start()
     try:
-        tray.run()
+        tray.run(after_visible=worker_loop)
     finally:
-        stop_event.set()
+        stop.set()
         r = runner_ref[0]
         if r is not None:
             r.stop()
-        worker.join(timeout=20)
+        log.info("Exit")
 
 
 if __name__ == "__main__":

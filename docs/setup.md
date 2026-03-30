@@ -2,70 +2,51 @@
 
 ## Prerequisites
 
-- Windows 10 or later
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) on your PATH
-- OpenVPN installed (Community installer is typical), or another build whose `openvpn.exe` path you put in config
-- A Pritunl-exported profile (`.ovpn` or `.conf`) and your account password plus TOTP secret
+- Windows 10+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- [OpenVPN Community](https://openvpn.net/community/) (`openvpn.exe`)
+- `.ovpn` profile (e.g. from Pritunl) next to `config.json` or path in config
 
 ## Install
-
-From the repository root:
 
 ```powershell
 .\scripts\install.ps1
 ```
 
-Or manually:
-
-```powershell
-uv sync
-```
+Or: `uv sync`
 
 ## Configuration
 
 1. Copy [`config/config.example.json`](../config/config.example.json) to `config/config.json`.
-2. Fill in `username`, `password`, and `totp_secret`.
+2. Set `username`, `password` (PIN/static part), `totp_secret` (Base32).
+3. Set `openvpn_path` and `profile` (relative paths are resolved from the `config.json` directory).
+4. Optional: `log_directory` for OpenVPN’s own log file.
 
-### TOTP secret from a QR screenshot (local, offline)
+Env: `VPN_DAEMON_CONFIG` = full path to `config.json` if not using the default location.
 
-Install the optional helper dependency and run:
-
-```powershell
-uv sync --extra helper
-uv run --extra helper python src/helper/scan_totp_qr.py path\to\your\qr-screenshot.png
-```
-
-It prints the Base32 `secret` for `totp_secret`. Use `--json` for issuer/label plus secret. Do not upload enrollment QRs to third-party sites; this runs only on your machine.
-3. Set `openvpn_path` to your `openvpn.exe`.
-4. Copy your VPN profile into `config/profile.ovpn` (or set `profile` to an absolute path). If the profile references external certificate files, keep those paths valid or embed certs in the profile.
-
-The daemon adds `--management` on the command line so it can read link state. Ensure nothing else binds the same `management_port` (default `7505`).
-
-## First run
+## Run
 
 ```powershell
 .\scripts\run.ps1
 ```
 
-Or:
+Or: `uv run python -m vpn_daemon`
+
+**Tray:** right-click **Connect** / **Disconnect** / **Reconnect** / **Quit**. The icon color follows OpenVPN management state (green when connected).
+
+## TOTP check (compare with your VPN client)
 
 ```powershell
-uv run python -m vpn_daemon
+uv run python src/helper/otp.py --secret YOUR_BASE32 --pin yourpin
 ```
 
-Optional: set `VPN_DAEMON_CONFIG` to the full path of `config.json` if it lives elsewhere.
+## QR → TOTP secret
 
-## Tray
+```powershell
+uv sync --extra helper
+uv run --extra helper python src/helper/scan_totp_qr.py path\to\qr.png
+```
 
-After start you should see a tray icon:
+## Logon task
 
-- Green: connected
-- Amber: connecting
-- Red: disconnected (or you chose Disconnect)
-- Gray: daemon paused
-
-Use the menu for Pause, Reconnect, Disconnect, and Quit.
-
-## State file
-
-Pause and manual disconnect are stored under `%LOCALAPPDATA%\vpn-daemon\state.json` so they survive restarts.
+See [task-scheduler.md](task-scheduler.md).

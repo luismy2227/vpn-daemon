@@ -1,0 +1,8 @@
+{
+  "tools": [
+    "git",
+    "python",
+    "uv",
+    "powershell"
+  ]
+}
