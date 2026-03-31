@@ -13,6 +13,8 @@ Menu: **Connect**, **Disconnect**, **Reconnect**, **Settings**, **Quit**.
 
 On first launch, a UAC prompt requests administrator rights (required for routing), then the **setup wizard** opens to enter your credentials and paths. Credentials are stored in **Windows Credential Manager** — never in plain text on disk.
 
+The standalone build (`dist\vpn-daemon.exe` after `.\scripts\build.ps1`) keeps settings in `config\config.json` **next to that executable**. The build does not ship that file; if it is missing, the setup wizard runs automatically instead of crashing.
+
 ## Features
 
 - TOTP + PIN authentication (PIN + 6-digit TOTP appended as one password string)
@@ -21,6 +23,26 @@ On first launch, a UAC prompt requests administrator rights (required for routin
 - Settings UI accessible from tray menu — no manual JSON editing required
 - OpenVPN management socket for accurate connection state
 - Auto-start via Windows Task Scheduler
+
+## Running tests
+
+Install dev dependencies (includes pytest), then run the suite from the repo root:
+
+```powershell
+uv sync --group dev
+uv run pytest
+```
+
+```powershell
+# Verbose output
+uv run pytest -v
+
+# One file or one test
+uv run pytest tests/test_config.py -v
+uv run pytest tests/test_openvpn.py::test_effective_link_state_dead_process -v
+```
+
+Tests do not start OpenVPN or use the network. More detail: [Development & Building](docs/development.md).
 
 ## Docs
 
