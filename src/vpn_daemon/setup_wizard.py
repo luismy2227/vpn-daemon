@@ -15,9 +15,9 @@ from vpn_daemon.config import default_config_path
 from vpn_daemon.credentials import clear_credentials, load_credentials, save_credentials
 
 # Return values from run_setup_wizard
-SAVED    = "saved"
+SAVED = "saved"
 CANCELLED = "cancelled"
-CLEARED  = "cleared"
+CLEARED = "cleared"
 
 
 def _load_existing_json(config_path: Path) -> dict[str, Any]:
@@ -83,17 +83,24 @@ def run_setup_wizard(config_path: Path | None = None) -> str:
     # ── Credentials ──────────────────────────────────────────────────────────
     cred_frame = _section(root, "Credentials  (saved to Windows Credential Manager)")
 
-    v_username = tk.StringVar(value=existing_creds[0] if existing_creds else existing_json.get("username", ""))
-    v_password = tk.StringVar(value=existing_creds[1] if existing_creds else existing_json.get("password", ""))
-    v_totp = tk.StringVar(value=existing_creds[2] if existing_creds else existing_json.get("totp_secret", ""))
+    _user0 = existing_creds[0] if existing_creds else existing_json.get("username", "")
+    _pass1 = existing_creds[1] if existing_creds else existing_json.get("password", "")
+    _totp2 = existing_creds[2] if existing_creds else existing_json.get("totp_secret", "")
+    v_username = tk.StringVar(value=_user0)
+    v_password = tk.StringVar(value=_pass1)
+    v_totp = tk.StringVar(value=_totp2)
 
     _row(cred_frame, "Username:", v_username)
     _row(cred_frame, "Password (PIN):", v_password, show="•")
 
     totp_row = tk.Frame(cred_frame)
     totp_row.pack(fill="x", **PAD)
-    tk.Label(totp_row, text="TOTP Secret:", width=18, anchor="w", font=("Segoe UI", 9)).pack(side="left")
-    tk.Entry(totp_row, textvariable=v_totp, font=("Segoe UI", 9), width=28).pack(side="left", fill="x", expand=True)
+    tk.Label(
+        totp_row, text="TOTP Secret:", width=18, anchor="w", font=("Segoe UI", 9)
+    ).pack(side="left")
+    tk.Entry(
+        totp_row, textvariable=v_totp, font=("Segoe UI", 9), width=28
+    ).pack(side="left", fill="x", expand=True)
 
     def _test_totp() -> None:
         secret = v_totp.get().strip()
@@ -102,11 +109,18 @@ def run_setup_wizard(config_path: Path | None = None) -> str:
             return
         try:
             code = pyotp.TOTP(secret).now()
-            mb.showinfo("TOTP Test", f"Current code: {code}\n\nThis is what will be appended to your password.", parent=root)
+            mb.showinfo(
+                "TOTP Test",
+                f"Current code: {code}\n\n"
+                "This is what will be appended to your password.",
+                parent=root,
+            )
         except Exception as e:
             mb.showerror("TOTP Test", f"Invalid secret: {e}", parent=root)
 
-    tk.Button(totp_row, text="Test ▶", command=_test_totp, font=("Segoe UI", 9)).pack(side="left", padx=(4, 0))
+    tk.Button(
+        totp_row, text="Test ▶", command=_test_totp, font=("Segoe UI", 9)
+    ).pack(side="left", padx=(4, 0))
 
     # ── Paths ─────────────────────────────────────────────────────────────────
     path_frame = _section(root, "Paths")
@@ -115,14 +129,35 @@ def run_setup_wizard(config_path: Path | None = None) -> str:
     v_openvpn = tk.StringVar(value=existing_json.get("openvpn_path", default_ovpn))
     v_profile = tk.StringVar(value=existing_json.get("profile", ""))
 
-    def _path_row(parent: tk.Widget, label: str, var: tk.StringVar, is_dir: bool = False,
-                  filetypes: list[tuple[str, str]] | None = None) -> None:
+    def _path_row(
+        parent: tk.Widget,
+        label: str,
+        var: tk.StringVar,
+        is_dir: bool = False,
+        filetypes: list[tuple[str, str]] | None = None,
+    ) -> None:
         row = tk.Frame(parent)
         row.pack(fill="x", **PAD)
-        tk.Label(row, text=label, width=18, anchor="w", font=("Segoe UI", 9)).pack(side="left")
-        tk.Entry(row, textvariable=var, font=("Segoe UI", 9), width=32).pack(side="left", fill="x", expand=True)
-        cmd = (lambda v=var: _browse_dir(v)) if is_dir else (lambda v=var, ft=filetypes or []: _browse_file(v, ft))
-        tk.Button(row, text="Browse…", command=cmd, font=("Segoe UI", 9)).pack(side="left", padx=(4, 0))
+        tk.Label(row, text=label, width=18, anchor="w", font=("Segoe UI", 9)).pack(
+            side="left"
+        )
+        tk.Entry(row, textvariable=var, font=("Segoe UI", 9), width=32).pack(
+            side="left", fill="x", expand=True
+        )
+        if is_dir:
+
+            def _on_browse() -> None:
+                _browse_dir(var)
+
+        else:
+            _ft = filetypes or []
+
+            def _on_browse() -> None:
+                _browse_file(var, _ft)
+
+        tk.Button(row, text="Browse…", command=_on_browse, font=("Segoe UI", 9)).pack(
+            side="left", padx=(4, 0)
+        )
 
     _path_row(path_frame, "OpenVPN exe:", v_openvpn,
               filetypes=[("Executable", "*.exe"), ("All files", "*.*")])
@@ -135,10 +170,12 @@ def run_setup_wizard(config_path: Path | None = None) -> str:
     v_auto_connect = tk.BooleanVar(value=bool(existing_json.get("auto_connect", False)))
     v_notify = tk.BooleanVar(value=bool(existing_json.get("notify_on_action", False)))
     v_log_dir = tk.StringVar(value=existing_json.get("log_directory") or "")
-    v_tooltip = tk.StringVar(value=existing_json.get("tray_tooltip", "VPN \u2014 right-click for menu"))
+    _tip_default = "VPN \u2014 right-click for menu"
+    v_tooltip = tk.StringVar(value=existing_json.get("tray_tooltip", _tip_default))
 
-    tk.Checkbutton(opt_frame, text="Auto-connect on startup", variable=v_auto_connect,
-                   font=("Segoe UI", 9)).pack(anchor="w", padx=8)
+    tk.Checkbutton(
+        opt_frame, text="Auto-connect on startup", variable=v_auto_connect, font=("Segoe UI", 9)
+    ).pack(anchor="w", padx=8)
     tk.Checkbutton(opt_frame, text="Show notifications on state changes",
                    variable=v_notify, font=("Segoe UI", 9)).pack(anchor="w", padx=8)
 
@@ -157,7 +194,11 @@ def run_setup_wizard(config_path: Path | None = None) -> str:
         profile = v_profile.get().strip()
 
         if not all([username, totp_secret, openvpn_path, profile]):
-            mb.showerror("Validation", "Username, TOTP Secret, OpenVPN path, and Profile are required.", parent=root)
+            mb.showerror(
+                "Validation",
+                "Username, TOTP Secret, OpenVPN path, and Profile are required.",
+                parent=root,
+            )
             return
 
         try:

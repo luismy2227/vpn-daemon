@@ -32,6 +32,12 @@ Install the **dev** dependency group first (pytest lives there; `uv sync` alone 
 uv sync --group dev
 ```
 
+Lint with **flake8** (configuration in `.flake8`):
+
+```powershell
+uv run flake8 src tests
+```
+
 Run all tests from the repository root:
 
 ```powershell
@@ -51,6 +57,8 @@ uv run pytest tests/test_openvpn.py -v
 # One test (node id)
 uv run pytest tests/test_config.py::test_default_config_path_pyinstaller -v
 ```
+
+On **GitHub**, push/PR to `main` or `master` runs the same checks (`.github/workflows/ci.yml`): `flake8` then `pytest` on Ubuntu with Python 3.11.
 
 ## Building the .exe
 

@@ -106,9 +106,14 @@ class TrayController:
             self._maybe_notify("VPN", "VPN Connected")
         elif prev == VpnLinkState.CONNECTED and new == VpnLinkState.DISCONNECTED:
             self._maybe_notify("VPN", "VPN Disconnected")
-        elif prev == VpnLinkState.CONNECTED and new in (VpnLinkState.CONNECTING, VpnLinkState.RECONNECTING):
+        elif prev == VpnLinkState.CONNECTED and new in (
+            VpnLinkState.CONNECTING,
+            VpnLinkState.RECONNECTING,
+        ):
             self._maybe_notify("VPN", "VPN Reconnecting\u2026")
-        elif prev in (VpnLinkState.CONNECTING, VpnLinkState.RECONNECTING) and new == VpnLinkState.DISCONNECTED:
+        elif prev in (VpnLinkState.CONNECTING, VpnLinkState.RECONNECTING) and (
+            new == VpnLinkState.DISCONNECTED
+        ):
             self._maybe_notify("VPN", "VPN Connection Failed")
 
     def _on_toggle(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:

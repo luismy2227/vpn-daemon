@@ -30,6 +30,7 @@ Install dev dependencies (includes pytest), then run the suite from the repo roo
 
 ```powershell
 uv sync --group dev
+uv run flake8 src tests
 uv run pytest
 ```
 

@@ -1,0 +1,13 @@
+[flake8]
+max-line-length = 100
+extend-exclude =
+    .git,
+    .venv,
+    __pycache__,
+    build,
+    dist,
+extend-ignore =
+    # Black / formatter compatibility (if added later)
+    E203,
+    E266,
+    W503

@@ -116,8 +116,10 @@ def _make_config(**kwargs) -> Config:
     return Config(**defaults)
 
 
-def _run_mock_mgmt_server(host: str, port: int, state_response: bytes, event: threading.Event) -> None:
-    """Simulate an OpenVPN management interface: send banner, wait for 'state', reply."""
+def _run_mock_mgmt_server(
+    host: str, port: int, state_response: bytes, event: threading.Event
+) -> None:
+    """Simulate OpenVPN management: send banner, wait for 'state', reply."""
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
@@ -143,7 +145,11 @@ def test_query_management_state_connected():
     HOST, PORT = "127.0.0.1", 17505
     state_response = b"1617891234,CONNECTED,SUCCESS,10.0.0.2\r\nEND\r\n"
     ready = threading.Event()
-    t = threading.Thread(target=_run_mock_mgmt_server, args=(HOST, PORT, state_response, ready), daemon=True)
+    t = threading.Thread(
+        target=_run_mock_mgmt_server,
+        args=(HOST, PORT, state_response, ready),
+        daemon=True,
+    )
     t.start()
     ready.wait(timeout=2)
 
@@ -156,7 +162,11 @@ def test_query_management_state_connecting():
     HOST, PORT = "127.0.0.1", 17506
     state_response = b"1617891234,AUTH,,\r\nEND\r\n"
     ready = threading.Event()
-    t = threading.Thread(target=_run_mock_mgmt_server, args=(HOST, PORT, state_response, ready), daemon=True)
+    t = threading.Thread(
+        target=_run_mock_mgmt_server,
+        args=(HOST, PORT, state_response, ready),
+        daemon=True,
+    )
     t.start()
     ready.wait(timeout=2)
 
