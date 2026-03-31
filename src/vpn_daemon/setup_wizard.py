@@ -11,8 +11,13 @@ from typing import Any
 
 import pyotp
 
-from vpn_daemon.config import CredentialsMissingError, default_config_path, load_config
-from vpn_daemon.credentials import load_credentials, save_credentials
+from vpn_daemon.config import default_config_path
+from vpn_daemon.credentials import clear_credentials, load_credentials, save_credentials
+
+# Return values from run_setup_wizard
+SAVED    = "saved"
+CANCELLED = "cancelled"
+CLEARED  = "cleared"
 
 
 def _load_existing_json(config_path: Path) -> dict[str, Any]:
@@ -32,16 +37,16 @@ def _save_json(config_path: Path, data: dict[str, Any]) -> None:
         f.write("\n")
 
 
-def run_setup_wizard(config_path: Path | None = None) -> bool:
+def run_setup_wizard(config_path: Path | None = None) -> str:
     """Open the setup wizard and block until it is closed.
 
-    Returns True if the user saved successfully, False if they cancelled.
+    Returns one of the module-level constants: SAVED, CANCELLED, or CLEARED.
     Intended to be called from a dedicated thread (not the pystray main thread).
     """
     if config_path is None:
         config_path = default_config_path()
 
-    result: list[bool] = [False]
+    result: list[str] = [CANCELLED]
 
     existing_json = _load_existing_json(config_path)
     existing_creds = load_credentials()
@@ -57,16 +62,12 @@ def run_setup_wizard(config_path: Path | None = None) -> bool:
         lf.pack(fill="x", padx=10, pady=(8, 0))
         return lf
 
-    def _row(parent: tk.Widget, label: str, var: tk.Variable,
-             show: str = "", extra_widget: tk.Widget | None = None) -> tk.Entry:
+    def _row(parent: tk.Widget, label: str, var: tk.Variable, show: str = "") -> tk.Entry:
         row = tk.Frame(parent)
         row.pack(fill="x", **PAD)
         tk.Label(row, text=label, width=18, anchor="w", font=("Segoe UI", 9)).pack(side="left")
         entry = tk.Entry(row, textvariable=var, show=show, font=("Segoe UI", 9), width=36)
         entry.pack(side="left", fill="x", expand=True)
-        if extra_widget:
-            extra_widget_frame = extra_widget
-            extra_widget_frame.pack(side="left", padx=(4, 0))
         return entry
 
     def _browse_file(var: tk.StringVar, filetypes: list[tuple[str, str]]) -> None:
@@ -134,7 +135,7 @@ def run_setup_wizard(config_path: Path | None = None) -> bool:
     v_auto_connect = tk.BooleanVar(value=bool(existing_json.get("auto_connect", False)))
     v_notify = tk.BooleanVar(value=bool(existing_json.get("notify_on_action", False)))
     v_log_dir = tk.StringVar(value=existing_json.get("log_directory") or "")
-    v_tooltip = tk.StringVar(value=existing_json.get("tray_tooltip", "VPN — right-click for menu"))
+    v_tooltip = tk.StringVar(value=existing_json.get("tray_tooltip", "VPN \u2014 right-click for menu"))
 
     tk.Checkbutton(opt_frame, text="Auto-connect on startup", variable=v_auto_connect,
                    font=("Segoe UI", 9)).pack(anchor="w", padx=8)
@@ -159,7 +160,6 @@ def run_setup_wizard(config_path: Path | None = None) -> bool:
             mb.showerror("Validation", "Username, TOTP Secret, OpenVPN path, and Profile are required.", parent=root)
             return
 
-        # Validate TOTP secret
         try:
             pyotp.TOTP(totp_secret).now()
         except Exception:
@@ -169,7 +169,6 @@ def run_setup_wizard(config_path: Path | None = None) -> bool:
         save_credentials(username, password, totp_secret)
 
         data = _load_existing_json(config_path)
-        # Remove credentials from JSON — they now live in the keyring
         for k in ("username", "password", "totp_secret"):
             data.pop(k, None)
 
@@ -183,11 +182,46 @@ def run_setup_wizard(config_path: Path | None = None) -> bool:
         data["log_directory"] = log_dir if log_dir else None
 
         _save_json(config_path, data)
-        result[0] = True
+        result[0] = SAVED
+        root.destroy()
+
+    def _clear_all() -> None:
+        confirmed = mb.askyesno(
+            "Clear All Settings",
+            "This will permanently erase:\n"
+            "  \u2022  All credentials from Windows Credential Manager\n"
+            "  \u2022  Your configuration file (config.json)\n\n"
+            "The application will exit so you can start fresh.\n\n"
+            "Are you sure?",
+            icon="warning",
+            parent=root,
+        )
+        if not confirmed:
+            return
+
+        clear_credentials()
+        try:
+            config_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        mb.showinfo(
+            "Settings Cleared",
+            "All settings and credentials have been erased.\n\n"
+            "The application will now exit. Re-launch to configure from scratch.",
+            parent=root,
+        )
+        result[0] = CLEARED
         root.destroy()
 
     def _cancel() -> None:
         root.destroy()
+
+    # Clear All — far left, red to signal destructive action
+    tk.Button(
+        btn_frame, text="Clear All Settings", command=_clear_all,
+        font=("Segoe UI", 9), fg="white", bg="#c42b1c",
+    ).pack(side="left")
 
     tk.Button(btn_frame, text="Save", command=_save, font=("Segoe UI", 9),
               width=10, bg="#0078d4", fg="white").pack(side="right", padx=(4, 0))

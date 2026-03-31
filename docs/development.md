@@ -26,6 +26,14 @@ If credentials are missing from Windows Credential Manager, the setup wizard ope
 
 ## Running tests
 
+Install the **dev** dependency group first (pytest lives there; `uv sync` alone is not enough):
+
+```powershell
+uv sync --group dev
+```
+
+Run all tests from the repository root:
+
 ```powershell
 uv run pytest
 ```
@@ -37,8 +45,11 @@ The management socket tests use a local TCP mock server.
 # Verbose output
 uv run pytest -v
 
-# Run a specific test file
+# One file
 uv run pytest tests/test_openvpn.py -v
+
+# One test (node id)
+uv run pytest tests/test_config.py::test_default_config_path_pyinstaller -v
 ```
 
 ## Building the .exe
@@ -49,7 +60,9 @@ uv run pytest tests/test_openvpn.py -v
 
 Output: `dist\vpn-daemon.exe` — a standalone single-file executable that requests UAC elevation via its manifest (no Python required on the target machine).
 
-The exe looks for `config\config.json` relative to its own directory.
+The exe looks for `config\config.json` relative to its own directory. PyInstaller does **not** create that folder: on first run, if `config.json` is missing, the **setup wizard** opens so you can save settings (it creates `config\` next to the exe).
+
+**Rebuild fails with `PermissionError: ... dist\vpn-daemon.exe`:** Windows cannot overwrite the exe while it is running. Quit the tray app, close Explorer windows that are showing `dist\`, then run `.\scripts\build.ps1` again.
 
 ## Project structure
 

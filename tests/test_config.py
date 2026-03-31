@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -97,9 +98,21 @@ def test_default_config_path_env(monkeypatch, tmp_path):
 
 def test_default_config_path_default(monkeypatch):
     monkeypatch.delenv("VPN_DAEMON_CONFIG", raising=False)
+    monkeypatch.delattr(sys, "frozen", raising=False)
     result = default_config_path()
     assert result.name == "config.json"
     assert result.parent.name == "config"
+
+
+def test_default_config_path_pyinstaller(monkeypatch, tmp_path):
+    """Frozen exe resolves config next to sys.executable, not under %TEMP%\\_MEI…"""
+    monkeypatch.delenv("VPN_DAEMON_CONFIG", raising=False)
+    fake_exe = tmp_path / "vpn-daemon.exe"
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(fake_exe), raising=False)
+    result = default_config_path()
+    assert result == (tmp_path / "config" / "config.json").resolve()
 
 
 def test_resolve_path_absolute(tmp_path):

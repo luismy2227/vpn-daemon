@@ -32,9 +32,13 @@ def main() -> None:
     config_path = default_config_path()
     try:
         config = load_config(config_path)
-    except CredentialsMissingError:
-        log.info("Credentials missing — launching setup wizard.")
+    except (FileNotFoundError, CredentialsMissingError) as exc:
+        if isinstance(exc, FileNotFoundError):
+            log.info("Config not found at %s — launching setup wizard.", config_path)
+        else:
+            log.info("Credentials missing — launching setup wizard.")
         from vpn_daemon.setup_wizard import run_setup_wizard
+
         if not run_setup_wizard(config_path):
             log.info("Setup cancelled. Exiting.")
             return

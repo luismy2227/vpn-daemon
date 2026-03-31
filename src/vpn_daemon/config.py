@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,10 @@ def default_config_path() -> Path:
     env = os.environ.get("VPN_DAEMON_CONFIG")
     if env:
         return Path(env).expanduser().resolve()
+    # PyInstaller one-file: __file__ lives under %TEMP%\_MEI…; use the .exe directory instead.
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        return (exe_dir / "config" / "config.json").resolve()
     root = Path(__file__).resolve().parents[2]
     return (root / "config" / "config.json").resolve()
 
