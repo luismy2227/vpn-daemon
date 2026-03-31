@@ -70,9 +70,10 @@ def load_config(path: Path | None = None) -> Config:
         from vpn_daemon.credentials import load_credentials  # avoid circular at module level
         creds = load_credentials()
         if creds is None:
+            from vpn_daemon.platforms import get_platform_backend
+
             raise CredentialsMissingError(
-                "Credentials not found in config.json or Windows Credential Manager. "
-                "Run the setup wizard to configure them."
+                get_platform_backend().credentials_missing_config_message()
             )
         kr_user, kr_pass, kr_totp = creds
         username = username or kr_user

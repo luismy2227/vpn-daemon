@@ -1,29 +1,21 @@
 from __future__ import annotations
 
-import ctypes
 import logging
 import queue
-import sys
 import threading
 import time
 
 from vpn_daemon.config import CredentialsMissingError, default_config_path, load_config
 from vpn_daemon.openvpn import OpenVpnRunner, VpnLinkState
+from vpn_daemon.platforms import get_platform_backend
 from vpn_daemon.tray_app import TrayController, icon_for_state
 
 log = logging.getLogger(__name__)
 
 
-def _ensure_admin() -> None:
-    if ctypes.windll.shell32.IsUserAnAdmin():
-        return
-    params = " ".join(f'"{a}"' for a in sys.argv)
-    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
-    sys.exit(0)
-
-
 def main() -> None:
-    _ensure_admin()
+    platform_backend = get_platform_backend()
+    platform_backend.ensure_elevated_or_relaunch()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -62,7 +54,7 @@ def main() -> None:
         return merged[:120]
 
     def worker_loop(icon) -> None:
-        runner = OpenVpnRunner(config)
+        runner = OpenVpnRunner(config, platform_backend=platform_backend)
         runner_ref[0] = runner
         last_verb = "idle"
         prev_st = VpnLinkState.DISCONNECTED

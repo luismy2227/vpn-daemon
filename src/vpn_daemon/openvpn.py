@@ -8,9 +8,13 @@ import tempfile
 import time
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from vpn_daemon.config import Config
 from vpn_daemon.otp import build_otp_password
+
+if TYPE_CHECKING:
+    from vpn_daemon.platforms.base import PlatformBackend
 
 log = logging.getLogger(__name__)
 
@@ -164,8 +168,16 @@ def build_openvpn_argv_and_files(cfg: Config) -> tuple[list[str], Path, Path | N
 
 
 class OpenVpnRunner:
-    def __init__(self, config: Config) -> None:
+    def __init__(
+        self,
+        config: Config,
+        *,
+        platform_backend: PlatformBackend | None = None,
+    ) -> None:
+        from vpn_daemon.platforms import get_platform_backend
+
         self._config = config
+        self._platform = platform_backend or get_platform_backend()
         self._proc: subprocess.Popen[str] | None = None
         self._auth_path: Path | None = None
         self._profile_tmp: Path | None = None
@@ -193,17 +205,16 @@ class OpenVpnRunner:
         self._auth_path = auth_path
         self._profile_tmp = profile_tmp
 
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        popen_kw: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "text": True,
+        }
+        popen_kw.update(self._platform.openvpn_popen_kwargs())
 
         try:
-            self._proc = subprocess.Popen(
-                args,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creationflags,
-                text=True,
-            )
+            self._proc = subprocess.Popen(args, **popen_kw)
         except OSError:
             self._auth_path.unlink(missing_ok=True)
             self._auth_path = None
@@ -308,7 +319,7 @@ class OpenVpnRunner:
             if host:
                 return (
                     VpnLinkState.CONNECTED
-                    if _ping_host(host)
+                    if self._platform.ping_reachable(host)
                     else VpnLinkState.CONNECTING
                 )
             return VpnLinkState.CONNECTED
@@ -318,7 +329,7 @@ class OpenVpnRunner:
         if alive and mgmt is not None:
             if mgmt == VpnLinkState.CONNECTED:
                 host = self._config.internal_ping_host
-                if host and not _ping_host(host):
+                if host and not self._platform.ping_reachable(host):
                     return VpnLinkState.CONNECTING
             return mgmt
 
@@ -332,22 +343,10 @@ class OpenVpnRunner:
                     cfg.management_host,
                     cfg.management_port,
                 )
-            if cfg.internal_ping_host and _ping_host(cfg.internal_ping_host):
+            if cfg.internal_ping_host and self._platform.ping_reachable(
+                cfg.internal_ping_host
+            ):
                 return VpnLinkState.CONNECTED
             return VpnLinkState.CONNECTING
 
         return VpnLinkState.DISCONNECTED
-
-
-def _ping_host(host: str) -> bool:
-    try:
-        r = subprocess.run(
-            ["ping", "-n", "1", "-w", "2000", host],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        return r.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
-        return False
