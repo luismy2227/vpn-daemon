@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 
 from vpn_daemon.config import Config
 from vpn_daemon.openvpn import VpnLinkState
+from vpn_daemon.tray_click_feedback import TrayClickFeedback, get_tray_click_feedback
 
 log = logging.getLogger(__name__)
 
@@ -85,9 +86,16 @@ def icon_for_state(state: VpnLinkState) -> Image.Image:
 
 
 class TrayController:
-    def __init__(self, config: Config, ctrl: queue.Queue[str]) -> None:
+    def __init__(
+        self,
+        config: Config,
+        ctrl: queue.Queue[str],
+        *,
+        click_feedback: TrayClickFeedback | None = None,
+    ) -> None:
         self._config = config
         self._ctrl = ctrl
+        self._click_feedback = click_feedback if click_feedback is not None else get_tray_click_feedback()
         self._icon: pystray.Icon | None = None
 
     def _maybe_notify(self, title: str, msg: str) -> None:
@@ -117,6 +125,7 @@ class TrayController:
             self._maybe_notify("VPN", "VPN Connection Failed")
 
     def _on_toggle(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        self._click_feedback.play()
         self._ctrl.put("toggle")
 
     def _on_connect(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
