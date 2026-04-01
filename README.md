@@ -1,5 +1,8 @@
 # vpn-daemon v0.4.0
 
+[![flake8](https://img.shields.io/github/actions/workflow/status/luismy2227/vpn-daemon/ci.yml?branch=master&label=flake8&logo=python&logoColor=white)](https://github.com/luismy2227/vpn-daemon/actions/workflows/ci.yml)
+[![pytest](https://img.shields.io/github/actions/workflow/status/luismy2227/vpn-daemon/ci.yml?branch=master&label=pytest&logo=pytest&logoColor=white)](https://github.com/luismy2227/vpn-daemon/actions/workflows/ci.yml)
+
 Windows **system tray** app that starts **OpenVPN** with **`username` + (PIN + TOTP)** authentication.
 
 Menu: **Connect**, **Disconnect**, **Reconnect**, **Settings**, **Quit**.

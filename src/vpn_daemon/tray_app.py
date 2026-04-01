@@ -95,7 +95,7 @@ class TrayController:
     ) -> None:
         self._config = config
         self._ctrl = ctrl
-        self._click_feedback = click_feedback if click_feedback is not None else get_tray_click_feedback()
+        self._click_feedback = click_feedback or get_tray_click_feedback()
         self._icon: pystray.Icon | None = None
 
     def _maybe_notify(self, title: str, msg: str) -> None:
