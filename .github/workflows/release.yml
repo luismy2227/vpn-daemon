@@ -1,0 +1,53 @@
+# Build vpn-daemon.exe (PyInstaller) and attach it to a GitHub Release.
+#
+# Typical flow: merge to main/master, bump version in pyproject.toml, then:
+#   git tag v0.5.0 && git push origin v0.5.0
+# Pushing the tag triggers this workflow (pushing only the branch does not).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Python
+        run: uv python install 3.11
+
+      - name: Sync build dependencies
+        run: uv sync --group build
+
+      - name: PyInstaller
+        run: uv run pyinstaller vpn_daemon.spec --clean
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          $name = "vpn-daemon-${{ github.ref_name }}-windows-amd64.exe"
+          Move-Item -LiteralPath dist/vpn-daemon.exe -Destination "dist/$name"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/vpn-daemon-${{ github.ref_name }}-windows-amd64.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
