@@ -55,7 +55,7 @@ def _composite_icon(base: Image.Image, state: VpnLinkState) -> Image.Image:
     colour = _STATE_COLOUR.get(state, _DEFAULT_COLOUR)
     img = base.copy()
     draw = ImageDraw.Draw(img)
-    dot = max(6, _TRAY // 5)          # dot diameter ≈ 6–7 px at 32 px icon
+    dot = 2 * max(6, _TRAY // 5)      # dot diameter ≈ 12 px at 32 px icon (2× prior radius)
     margin = 1
     x0 = _TRAY - dot - margin
     y0 = _TRAY - dot - margin
